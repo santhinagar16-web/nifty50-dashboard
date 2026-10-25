@@ -143,7 +143,7 @@ Engine: atomic snapshot writes, side-aware event bias, hourly pruning,
 7-day retention, unique-index protection against duplicate rows.
 
 Requirements:
-    pip install "streamlit>=1.46" "plotly>=5" "pandas>=1.5" pnsea
+    pip install "streamlit>=1.46" "plotly>=5" "pandas>=1.5" pnsea requests
 Run:
     streamlit run app.py
 """
@@ -154,6 +154,7 @@ import hashlib
 import html
 import logging
 import math
+import os
 import random
 import sqlite3
 import sys
@@ -168,6 +169,7 @@ from typing import Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+import requests
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
@@ -199,7 +201,8 @@ IST               = ZoneInfo("Asia/Kolkata")
 # the old relative path silently created a brand-new empty DB whenever the
 # app was started from a different working directory (e.g. a .bat in
 # another folder), making all previously stored history "disappear".
-DB_PATH           = str(Path(__file__).resolve().parent / "options_history.db")
+_DATA_DIR         = os.getenv("RENDER_DISK_PATH", str(Path(__file__).resolve().parent))
+DB_PATH           = os.path.join(_DATA_DIR, "options_history.db")
 POLL_SECONDS      = 15          # background poller cadence (market hours)
 OFFHOURS_POLL_SECONDS = 60      # gentle cadence outside market hours
 BOOTSTRAP_RETRY_SECONDS = 30   # re-seed attempts while the DB looks empty
@@ -298,6 +301,32 @@ ACTIVITY_META = {
 ACTIVITY_TAG_FLOOR = 500   # = REL_MIN_ABS: the smallest move the
                            # detector itself would ever mint; bars below
                            # this are sub-threshold noise and stay untagged
+
+
+# ── Telegram Alerts (optional — set env vars or fill below) ─────────
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_MIN_DOI   = int(os.getenv("TELEGRAM_MIN_DOI", "5000"))
+TELEGRAM_MAX_ITEMS = 15
+
+
+def send_telegram_alert(event_text: str):
+    """Send an HTML-formatted grouped alert to Telegram if configured."""
+    token = TELEGRAM_BOT_TOKEN.strip()
+    chat_id = TELEGRAM_CHAT_ID.strip()
+    if not token or not chat_id:
+        return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": event_text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except Exception as exc:
+        logger.warning("Telegram alert failed: %s", exc)
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -1295,6 +1324,29 @@ class NiftyOptionEngine:
         m_open = market_open(now)
         if m_open or DETECT_OFFHOURS_EVENTS:
             events = self._detect_events(prev, combined, spot)
+            big_events = sorted(
+                [e for e in events if abs(e["d_oi"]) >= TELEGRAM_MIN_DOI],
+                key=lambda x: abs(x["d_oi"]),
+                reverse=True,
+            )[:TELEGRAM_MAX_ITEMS]
+            if big_events:
+                lines = [
+                    f"⏱️ <b>{html.escape(str(symbol))} ({html.escape(str(expiry))}) — "
+                    f"{now.strftime('%H:%M:%S')}</b> | Spot: <b>{spot:,.2f}</b>"
+                ]
+                for e in big_events:
+                    cls = e["classification"]
+                    label = CLASS_META.get(cls, {}).get("label", cls)
+                    sign = event_sign(cls, e["side"])
+                    emoji = SIGN_EMOJI.get(sign, "🚨")
+                    lines.append(
+                        f"{emoji} <b>{html.escape(str(label))}</b> | "
+                        f"<b>{e['strike']:,.0f} {html.escape(str(e['side']))}</b> | "
+                        f"Δ OI: <b>{e['d_oi']:+,.0f}</b> (Prem {e['d_ltp_pct']:+.1f}%)
+"
+                        f"<i>{html.escape(str(e['note']))}</i>"
+                    )
+                send_telegram_alert("\n\n".join(lines))
         else:
             events = []
 
