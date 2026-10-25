@@ -1,7 +1,5 @@
 streamlit>=1.46
-
 plotly>=5
-
 pandas>=1.5
-
 pnsea
+requests
