@@ -1342,8 +1342,7 @@ class NiftyOptionEngine:
                     lines.append(
                         f"{emoji} <b>{html.escape(str(label))}</b> | "
                         f"<b>{e['strike']:,.0f} {html.escape(str(e['side']))}</b> | "
-                        f"Δ OI: <b>{e['d_oi']:+,.0f}</b> (Prem {e['d_ltp_pct']:+.1f}%)
-"
+                        f"Δ OI: <b>{e['d_oi']:+,.0f}</b> (Prem {e['d_ltp_pct']:+.1f}%)"
                         f"<i>{html.escape(str(e['note']))}</i>"
                     )
                 send_telegram_alert("\n\n".join(lines))
