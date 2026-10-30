@@ -20,7 +20,7 @@ Data hygiene (this version):
   • NSE data-age tracking — the pill shows how old the exchange data
     actually is, and flags it stale during market hours.
   • Optional off-hours polling (sidebar toggle, gentle 60s cadence).
-  • Self-healing NSE session — pnsea fetches its cookies ONCE and never
+  • Self-healing NSE session —  fetches its cookies ONCE and never
     refreshes them (they die after ~1-3 h → every poll fails), never
     times out a stalled request, and retries back-to-back with zero
     delay. This version adds a hard HTTP timeout, paced retries, and
@@ -333,7 +333,7 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger("nse_app")
 
 # ═══════════════════════ NSE HTTP-STACK HARDENING ═══════════════════════
-# pnsea → stealthkit → curl_cffi has three defects that kill any
+#  → stealthkit → curl_cffi has three defects that kill any
 # long-running poller (your symptoms: ~2 h in → poll errors, no data,
 # high CPU):
 #   1. NSE cookies are fetched ONCE at startup and NEVER refreshed.
@@ -351,7 +351,7 @@ logger = logging.getLogger("nse_app")
 def _build_nse_client():
     """Fresh NSE client = fresh cookies. Used at startup and for every
     scheduled/reactive rebuild — the only reliable way to refresh NSE's
-    short-lived cookies, which pnsea never does on its own."""
+    short-lived cookies, which  never does on its own."""
     client = NSE()
     client.session.retries = 2      # paced by the patched request() below
     return client
@@ -374,7 +374,7 @@ def _harden_nse_http_stack():
 
     # 2) replace stealthkit's zero-delay retry loop with paced retries
     #    that RAISE on exhaustion (it used to return None after instant
-    #    retries, which then blew up inside pnsea as AttributeError)
+    #    retries, which then blew up inside  as AttributeError)
     try:
         from stealthkit.stealth import StealthSession
 
@@ -1067,7 +1067,7 @@ class NiftyOptionEngine:
 
     def _rebuild_nse(self, reason: str):
         """Swap in a brand-new NSE client (fresh cookies). Fixes the #1
-        long-run failure: pnsea fetches cookies once and never refreshes
+        long-run failure:  fetches cookies once and never refreshes
         them, so after ~1-3 h every call fails until restart."""
         now = time.time()
         if now - self._last_rebuild < NSE_REBUILD_MIN_GAP:
@@ -1129,7 +1129,7 @@ class NiftyOptionEngine:
 
     # -------------------- polling --------------------
     def _poll_loop(self):
-        # pnsea's aiohttp-style calls want a selector loop in THIS thread
+        #  aiohttp-style calls want a selector loop in THIS thread
         # on Windows. asyncio.set_event_loop() is NOT deprecated (unlike
         # the policy API).
         if sys.platform == "win32":
@@ -2838,7 +2838,7 @@ st.set_page_config(page_title="NSE Options Analytics + OI Events",
                    page_icon="⚡", layout="wide")
 
 if not PNSEA_AVAILABLE:
-    st.error("Missing dependency: run `pip install pnsea` and restart the app.")
+    st.error("Missing dependency: run `pip install pnea` and restart the app.")
     st.stop()
 
 
@@ -3005,7 +3005,7 @@ st.sidebar.caption(f"Poller {POLL_SECONDS}s (market) / {OFFHOURS_POLL_SECONDS}s 
 # -------------------- MAIN AREA --------------------
 st.title("NSE Options Analytics + OI Event Detector")
 st.caption("Live option-chain analytics, OI & IV structure and OI event "
-           "detection · data: NSE via pnsea · stored locally in SQLite (WAL)")
+           "detection · data: NSE via  · stored locally in SQLite (WAL)")
 
 # -------------------- LIVE UPDATES (only on new NSE data) --------------------
 # The old design re-rendered the dashboard every REFRESH_SECONDS whether or
